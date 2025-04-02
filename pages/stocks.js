@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { saveStockData, getStockData } from "../lib/indexedDB";
 import StockTable from "../components/StockTable";
-import yahooFinance from "yahoo-finance2";
+import * as yahooFinance from "yahoo-finance2"; // ✅ Correct import
 
 export default function Stocks() {
   const [symbol, setSymbol] = useState("");
