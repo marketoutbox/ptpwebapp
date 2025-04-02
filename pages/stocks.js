@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { saveStockData, getStockData } from "../lib/indexedDB";
 import StockTable from "../components/StockTable";
-import * as yahooFinance from "yahoo-finance2"; // ✅ Correct Import
 
 export default function Stocks() {
   const [symbol, setSymbol] = useState("");
@@ -15,32 +14,18 @@ export default function Stocks() {
     try {
       console.log(`Fetching data for: ${symbol}`);
 
-      // Fetch stock data
-      const data = await yahooFinance.default.chart(symbol, {
-        period1: "2023-01-01",
-        period2: "2024-04-01",
-        interval: "1d",
-      });
+      const response = await fetch(`/api/stocks?symbol=${symbol}`);
+      const data = await response.json();
 
-      console.log("Raw API Response:", data);
-
-      if (!data || !data.chart || !data.chart.result || data.chart.result.length === 0) {
-        console.error("No data received. Check API response.");
-        setLoading(false);
-        return;
-      }
-
-      const stockInfo = data.chart.result[0];
-      const timestamps = stockInfo.timestamp;
-      const quotes = stockInfo.indicators.quote[0];
-
-      if (!timestamps || !quotes) {
+      if (!data || !data.timestamp || !data.indicators?.quote?.[0]) {
         console.error("Invalid data format.");
         setLoading(false);
         return;
       }
 
-      // Format data
+      const timestamps = data.timestamp;
+      const quotes = data.indicators.quote[0];
+
       const formattedData = timestamps.map((time, index) => ({
         date: new Date(time * 1000).toISOString().split("T")[0], // Convert timestamp to date
         symbol,
