@@ -1,6 +1,8 @@
 export default function StockTable({ stocks }) {
+  if (stocks.length === 0) return <p>No data available.</p>;
+
   return (
-    <table border="1" style={{ width: "100%", marginTop: "20px" }}>
+    <table border="1" cellPadding="10" style={{ marginTop: "20px", width: "100%" }}>
       <thead>
         <tr>
           <th>Date</th>
@@ -16,10 +18,10 @@ export default function StockTable({ stocks }) {
           <tr key={index}>
             <td>{stock.date}</td>
             <td>{stock.symbol}</td>
-            <td>{stock.open}</td>
-            <td>{stock.high}</td>
-            <td>{stock.low}</td>
-            <td>{stock.close}</td>
+            <td>{stock.open.toFixed(2)}</td>
+            <td>{stock.high.toFixed(2)}</td>
+            <td>{stock.low.toFixed(2)}</td>
+            <td>{stock.close.toFixed(2)}</td>
           </tr>
         ))}
       </tbody>
