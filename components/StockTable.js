@@ -1,6 +1,6 @@
 export default function StockTable({ stocks }) {
   return (
-    <table border="1">
+    <table border="1" style={{ width: "100%", marginTop: "20px" }}>
       <thead>
         <tr>
           <th>Date</th>
