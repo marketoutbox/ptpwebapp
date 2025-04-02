@@ -11,6 +11,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "yahoo-finance2": "^2.0.0"
+    "yahoo-finance2": "^2.0.0",
+    "idb": "^7.1.1"
   }
 }
