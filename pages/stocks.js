@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { saveStockData, getStockData } from "../lib/indexedDB";
 import StockTable from "../components/StockTable";
-import * as yahooFinance from "yahoo-finance2"; // ✅ Correct import
+import yahooFinance from "yahoo-finance2"; // ✅ Correct import
 
 export default function Stocks() {
   const [symbol, setSymbol] = useState("");
@@ -15,20 +15,22 @@ export default function Stocks() {
     try {
       console.log(`Fetching data for: ${symbol}`);
 
-      // Using chart() instead of historical()
+      // Fetch stock data using chart()
       const data = await yahooFinance.chart(symbol, {
         period1: "2023-01-01",
         period2: "2024-04-01",
         interval: "1d",
       });
 
-      if (!data || !data.result || data.result.length === 0) {
+      console.log("Raw API Response:", data);
+
+      if (!data || !data.chart || !data.chart.result || data.chart.result.length === 0) {
         console.error("No data received. Check API response.");
         setLoading(false);
         return;
       }
 
-      const stockInfo = data.result[0];
+      const stockInfo = data.chart.result[0];
       const timestamps = stockInfo.timestamp;
       const quotes = stockInfo.indicators.quote[0];
 
