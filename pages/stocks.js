@@ -9,39 +9,55 @@ export default function Stocks() {
   const [loading, setLoading] = useState(false);
 
   async function fetchStockData() {
-  if (!symbol) return;
-  setLoading(true);
+    if (!symbol) return;
+    setLoading(true);
 
-  try {
-    console.log(`Fetching data for: ${symbol}`); // Debugging log
-    const data = await yahooFinance.historical(symbol, { period1: "2023-01-01", period2: "2024-04-01", interval: "1d" });
+    try {
+      console.log(`Fetching data for: ${symbol}`);
 
-    console.log("Fetched Data:", data); // Check if data is received
+      // Using chart() instead of historical()
+      const data = await yahooFinance.chart(symbol, {
+        period1: "2023-01-01",
+        period2: "2024-04-01",
+        interval: "1d",
+      });
 
-    if (!data || data.length === 0) {
-      console.error("No data received. Check API response.");
-      return;
+      if (!data || !data.result || data.result.length === 0) {
+        console.error("No data received. Check API response.");
+        setLoading(false);
+        return;
+      }
+
+      const stockInfo = data.result[0];
+      const timestamps = stockInfo.timestamp;
+      const quotes = stockInfo.indicators.quote[0];
+
+      if (!timestamps || !quotes) {
+        console.error("Invalid data format.");
+        setLoading(false);
+        return;
+      }
+
+      // Format data for IndexedDB storage
+      const formattedData = timestamps.map((time, index) => ({
+        date: new Date(time * 1000).toISOString().split("T")[0], // Convert timestamp to date
+        symbol,
+        open: quotes.open[index],
+        high: quotes.high[index],
+        low: quotes.low[index],
+        close: quotes.close[index],
+      }));
+
+      console.log("Formatted Data:", formattedData);
+
+      await saveStockData(symbol, formattedData);
+      setStocks(formattedData);
+    } catch (error) {
+      console.error("Error fetching stock data:", error);
     }
 
-    const formattedData = data.map((item) => ({
-      date: item.date,
-      symbol,
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close
-    }));
-
-    console.log("Formatted Data:", formattedData);
-
-    await saveStockData(symbol, formattedData);
-    setStocks(formattedData);
-  } catch (error) {
-    console.error("Error fetching stock data:", error);
+    setLoading(false);
   }
-
-  setLoading(false);
-}
 
   async function loadStockData() {
     if (!symbol) return;
