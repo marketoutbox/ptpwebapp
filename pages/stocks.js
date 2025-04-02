@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { saveStockData, getStockData } from "../lib/indexedDB";
 import StockTable from "../components/StockTable";
-import yahooFinance from "yahoo-finance2"; // ✅ Correct import
+import * as yahooFinance from "yahoo-finance2"; // ✅ Correct Import
 
 export default function Stocks() {
   const [symbol, setSymbol] = useState("");
@@ -15,8 +15,8 @@ export default function Stocks() {
     try {
       console.log(`Fetching data for: ${symbol}`);
 
-      // Fetch stock data using chart()
-      const data = await yahooFinance.chart(symbol, {
+      // Fetch stock data
+      const data = await yahooFinance.default.chart(symbol, {
         period1: "2023-01-01",
         period2: "2024-04-01",
         interval: "1d",
@@ -40,14 +40,14 @@ export default function Stocks() {
         return;
       }
 
-      // Format data for IndexedDB storage
+      // Format data
       const formattedData = timestamps.map((time, index) => ({
         date: new Date(time * 1000).toISOString().split("T")[0], // Convert timestamp to date
         symbol,
-        open: quotes.open[index],
-        high: quotes.high[index],
-        low: quotes.low[index],
-        close: quotes.close[index],
+        open: quotes.open[index] || 0,
+        high: quotes.high[index] || 0,
+        low: quotes.low[index] || 0,
+        close: quotes.close[index] || 0,
       }));
 
       console.log("Formatted Data:", formattedData);
@@ -63,7 +63,6 @@ export default function Stocks() {
 
   async function loadStockData() {
     if (!symbol) return;
-
     const data = await getStockData(symbol);
     setStocks(data);
   }
