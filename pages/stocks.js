@@ -9,28 +9,39 @@ export default function Stocks() {
   const [loading, setLoading] = useState(false);
 
   async function fetchStockData() {
-    if (!symbol) return;
-    setLoading(true);
+  if (!symbol) return;
+  setLoading(true);
 
-    try {
-      const data = await yahooFinance.historical(symbol, { period1: "2023-01-01", period2: "2024-04-01", interval: "1d" });
-      const formattedData = data.map((item) => ({
-        date: item.date,
-        symbol,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        close: item.close
-      }));
+  try {
+    console.log(`Fetching data for: ${symbol}`); // Debugging log
+    const data = await yahooFinance.historical(symbol, { period1: "2023-01-01", period2: "2024-04-01", interval: "1d" });
 
-      await saveStockData(symbol, formattedData);
-      setStocks(formattedData);
-    } catch (error) {
-      console.error("Error fetching stock data:", error);
+    console.log("Fetched Data:", data); // Check if data is received
+
+    if (!data || data.length === 0) {
+      console.error("No data received. Check API response.");
+      return;
     }
 
-    setLoading(false);
+    const formattedData = data.map((item) => ({
+      date: item.date,
+      symbol,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close
+    }));
+
+    console.log("Formatted Data:", formattedData);
+
+    await saveStockData(symbol, formattedData);
+    setStocks(formattedData);
+  } catch (error) {
+    console.error("Error fetching stock data:", error);
   }
+
+  setLoading(false);
+}
 
   async function loadStockData() {
     if (!symbol) return;
