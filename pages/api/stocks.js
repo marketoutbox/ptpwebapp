@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   console.log(`API Request received for symbol: ${symbol}`);
 
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1mo&interval=1d`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=5y&interval=1d`;
     console.log(`Fetching from Yahoo Finance: ${url}`);
 
     const response = await fetch(url);
