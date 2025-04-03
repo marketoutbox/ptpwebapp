@@ -61,10 +61,15 @@ const runBacktest = async () => {
       close: entry.close
     }));
 
+    // ✅ Make it available in console
+    window.pricesA = pricesA;
+
     const pricesB = stockBData.data.map(entry => ({
       date: entry.date,
       close: entry.close
     }));
+
+    window.pricesB = pricesB;
 
     console.log("Stock A Data:", pricesA);
     console.log("Stock B Data:", pricesB);
