@@ -35,15 +35,48 @@ const Backtest = () => {
     setSelectedPair(prev => ({ ...prev, [name]: value }));
   };
 
-  const runBacktest = async () => {
-    if (!selectedPair.stockA || !selectedPair.stockB) {
-      alert('Please select two stocks for pair trading.');
+const runBacktest = async () => {
+  if (!selectedPair.stockA || !selectedPair.stockB) {
+    alert('Please select two stocks for pair trading.');
+    return;
+  }
+
+  try {
+    const db = await openDB('StockDatabase', 1);
+    const tx = db.transaction('stocks', 'readonly');
+    const store = tx.objectStore('stocks');
+
+    // Fetch data for selected stocks
+    const stockAData = await store.get(selectedPair.stockA);
+    const stockBData = await store.get(selectedPair.stockB);
+
+    if (!stockAData || !stockBData) {
+      alert("Stock data not found in IndexedDB.");
       return;
     }
+
+    // Extract price series
+    const pricesA = stockAData.data.map(entry => ({
+      date: entry.date,
+      close: entry.close
+    }));
+
+    const pricesB = stockBData.data.map(entry => ({
+      date: entry.date,
+      close: entry.close
+    }));
+
+    console.log("Stock A Data:", pricesA);
+    console.log("Stock B Data:", pricesB);
+
+    // 📌 TODO: Add backtesting calculations here later
+    setBacktestResult(`Backtest completed for ${selectedPair.stockA} and ${selectedPair.stockB}. Check console for data.`);
     
-    // Dummy backtest logic (replace with actual logic later)
-    setBacktestResult(`Backtest results for ${selectedPair.stockA} and ${selectedPair.stockB}`);
-  };
+  } catch (error) {
+    console.error("Error fetching stock data:", error);
+  }
+};
+
 
   return (
     <div>
