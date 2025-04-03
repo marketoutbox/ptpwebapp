@@ -158,6 +158,31 @@ const Backtest = () => {
           </table>
         </div>
       )}
+
+      {/* Trade Results Table */}
+      {tradeResults.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h2>Trade Results</h2>
+          <table border="1" width="100%">
+            <thead>
+              <tr>
+                <th>Entry Date</th>
+                <th>Exit Date</th>
+                <th>Trade Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tradeResults.map((trade, index) => (
+                <tr key={index}>
+                  <td>{trade.entryDate}</td>
+                  <td>{trade.exitDate || 'Open'}</td>
+                  <td>{trade.type}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
