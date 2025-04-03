@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { openDB } from 'idb';
-import { calculateZScore } from '../utils/calculations'; // Import Z-score calculation function
+import { calculateZScore } from '../utils/calculateZScore';
 
 const Backtest = () => {
   const [stocks, setStocks] = useState([]);
   const [selectedPair, setSelectedPair] = useState({ stockA: '', stockB: '' });
-  const [backtestResult, setBacktestResult] = useState(null);
+  const [trades, setTrades] = useState([]);
 
   useEffect(() => {
     const fetchStocks = async () => {
@@ -14,19 +14,13 @@ const Backtest = () => {
         const tx = db.transaction('stocks', 'readonly');
         const store = tx.objectStore('stocks');
         const allStocks = await store.getAll();
-
-        if (!allStocks.length) {
-          console.warn("No stocks found in IndexedDB.");
-          return;
-        }
-
+        if (!allStocks.length) return;
         const symbols = allStocks.map(stock => stock.symbol);
         setStocks(symbols);
       } catch (error) {
         console.error("Error fetching stocks:", error);
       }
     };
-
     fetchStocks();
   }, []);
 
@@ -37,7 +31,7 @@ const Backtest = () => {
 
   const runBacktest = async () => {
     if (!selectedPair.stockA || !selectedPair.stockB) {
-      alert('Please select two stocks for pair trading.');
+      alert('Please select two stocks.');
       return;
     }
 
@@ -48,35 +42,56 @@ const Backtest = () => {
 
       const stockAData = await store.get(selectedPair.stockA);
       const stockBData = await store.get(selectedPair.stockB);
-
       if (!stockAData || !stockBData) {
         alert("Stock data not found in IndexedDB.");
         return;
       }
 
-      const pricesA = stockAData.data.map(entry => ({ date: entry.date, close: entry.close }));
-      const pricesB = stockBData.data.map(entry => ({ date: entry.date, close: entry.close }));
+      const pricesA = stockAData.data.map(entry => entry.close);
+      const pricesB = stockBData.data.map(entry => entry.close);
       
-      window.pricesA = pricesA;
-      window.pricesB = pricesB;
-
-      console.log("Stock A Data:", pricesA);
-      console.log("Stock B Data:", pricesB);
-
-      // Compute Ratios
-      const ratios = pricesA.map((a, i) => a.close / (pricesB[i]?.close || 1));
-      window.ratios = ratios;
-      console.log("First 5 Ratios:", ratios.slice(0, 5));
-
-      // Compute Z-Scores
+      // Calculate Ratios
+      const ratios = pricesA.map((a, i) => a / (pricesB[i] || 1));
       const zScores = calculateZScore(ratios);
-      window.zScores = zScores;
-      console.log("First 5 Z-Scores:", zScores.slice(0, 5));
 
-      setBacktestResult(`Backtest completed for ${selectedPair.stockA} and ${selectedPair.stockB}. Check console for data.`);
-      
+      window.ratios = ratios; // Debugging
+      window.zScores = zScores;
+
+      let currentPosition = null;
+      let tradeHistory = [];
+      let entryPriceA = 0, entryPriceB = 0;
+
+      zScores.forEach((z, i) => {
+        if (z > 2.5 && !currentPosition) {
+          // Short Ratio (Sell A, Buy B)
+          currentPosition = 'SHORT';
+          entryPriceA = pricesA[i];
+          entryPriceB = pricesB[i];
+          tradeHistory.push({ date: stockAData.data[i].date, type: 'Short', entryA: entryPriceA, entryB: entryPriceB });
+        } else if (z < -2.5 && !currentPosition) {
+          // Long Ratio (Buy A, Sell B)
+          currentPosition = 'LONG';
+          entryPriceA = pricesA[i];
+          entryPriceB = pricesB[i];
+          tradeHistory.push({ date: stockAData.data[i].date, type: 'Long', entryA: entryPriceA, entryB: entryPriceB });
+        } else if (currentPosition === 'SHORT' && z < 1.5) {
+          // Exit Short
+          tradeHistory[tradeHistory.length - 1].exitA = pricesA[i];
+          tradeHistory[tradeHistory.length - 1].exitB = pricesB[i];
+          tradeHistory[tradeHistory.length - 1].exitDate = stockAData.data[i].date;
+          currentPosition = null;
+        } else if (currentPosition === 'LONG' && z > -1.5) {
+          // Exit Long
+          tradeHistory[tradeHistory.length - 1].exitA = pricesA[i];
+          tradeHistory[tradeHistory.length - 1].exitB = pricesB[i];
+          tradeHistory[tradeHistory.length - 1].exitDate = stockAData.data[i].date;
+          currentPosition = null;
+        }
+      });
+
+      setTrades(tradeHistory);
     } catch (error) {
-      console.error("Error fetching stock data:", error);
+      console.error("Error running backtest:", error);
     }
   };
 
@@ -98,7 +113,34 @@ const Backtest = () => {
         </select>
       </div>
       <button onClick={runBacktest}>Run Backtest</button>
-      {backtestResult && <p>{backtestResult}</p>}
+      {trades.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Trade Type</th>
+              <th>Entry A</th>
+              <th>Entry B</th>
+              <th>Exit A</th>
+              <th>Exit B</th>
+              <th>Exit Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trades.map((trade, index) => (
+              <tr key={index}>
+                <td>{trade.date}</td>
+                <td>{trade.type}</td>
+                <td>{trade.entryA}</td>
+                <td>{trade.entryB}</td>
+                <td>{trade.exitA || '-'}</td>
+                <td>{trade.exitB || '-'}</td>
+                <td>{trade.exitDate || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 };
