@@ -8,16 +8,27 @@ const Backtest = () => {
   const [backtestResult, setBacktestResult] = useState(null);
 
   useEffect(() => {
-    const fetchStocks = async () => {
-      const db = await openDB('StockDB', 1);
+  const fetchStocks = async () => {
+    try {
+      const db = await openDB('StockDatabase', 1);
       const tx = db.transaction('stocks', 'readonly');
       const store = tx.objectStore('stocks');
-      const allStocks = await store.getAll();
-      setStocks(allStocks.map(stock => stock.symbol));
-    };
+      const allStocks = await store.getAll();  // Fetch full objects
 
-    fetchStocks();
-  }, []);
+      if (!allStocks.length) {
+        console.warn("No stocks found in IndexedDB.");
+        return;
+      }
+
+      const symbols = allStocks.map(stock => stock.symbol); // Extract symbols
+      setStocks(symbols);
+    } catch (error) {
+      console.error("Error fetching stocks:", error);
+    }
+  };
+
+  fetchStocks();
+}, []);
 
   const handleSelection = (event) => {
     const { name, value } = event.target;
