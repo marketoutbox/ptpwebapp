@@ -5,11 +5,7 @@ import calculateZScore from '../utils/calculations';
 const Backtest = () => {
   const [stocks, setStocks] = useState([]);
   const [selectedPair, setSelectedPair] = useState({ stockA: '', stockB: '' });
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [dataTable, setDataTable] = useState([]);
-  const [tradeResults, setTradeResults] = useState([]);
-  const [tradeSummary, setTradeSummary] = useState(null);
+  const [backtestData, setBacktestData] = useState([]);
 
   useEffect(() => {
     const fetchStocks = async () => {
@@ -18,16 +14,10 @@ const Backtest = () => {
         const tx = db.transaction('stocks', 'readonly');
         const store = tx.objectStore('stocks');
         const allStocks = await store.getAll();
-        
-        if (!allStocks.length) {
-          console.warn('No stocks found in IndexedDB.');
-          return;
-        }
-        
-        const symbols = allStocks.map(stock => stock.symbol);
-        setStocks(symbols);
+        if (!allStocks.length) return;
+        setStocks(allStocks.map(stock => stock.symbol));
       } catch (error) {
-        console.error('Error fetching stocks:', error);
+        console.error("Error fetching stocks:", error);
       }
     };
     fetchStocks();
@@ -40,7 +30,7 @@ const Backtest = () => {
 
   const runBacktest = async () => {
     if (!selectedPair.stockA || !selectedPair.stockB) {
-      alert('Please select two stocks for pair trading.');
+      alert('Please select two stocks.');
       return;
     }
 
@@ -48,96 +38,90 @@ const Backtest = () => {
       const db = await openDB('StockDatabase', 1);
       const tx = db.transaction('stocks', 'readonly');
       const store = tx.objectStore('stocks');
-
       const stockAData = await store.get(selectedPair.stockA);
       const stockBData = await store.get(selectedPair.stockB);
-
       if (!stockAData || !stockBData) {
-        alert('Stock data not found in IndexedDB.');
+        alert("Stock data not found.");
         return;
       }
 
-      const pricesA = stockAData.data.filter(d => d.date >= fromDate && d.date <= toDate);
-      const pricesB = stockBData.data.filter(d => d.date >= fromDate && d.date <= toDate);
+      const pricesA = stockAData.data.map(entry => ({ date: entry.date, close: entry.close }));
+      const pricesB = stockBData.data.map(entry => ({ date: entry.date, close: entry.close }));
       
-      const ratioSeries = pricesA.map((entry, index) => ({
-        date: entry.date,
-        stockA: entry.close,
-        stockB: pricesB[index]?.close,
-        ratio: entry.close / (pricesB[index]?.close || 1),
-      }));
-
-      const zScores = calculateZScore(ratioSeries.map(d => d.ratio));
-
-      const enrichedData = ratioSeries.map((entry, index) => ({
-        ...entry,
-        zScore: zScores[index] || 0
-      }));
-
-      setDataTable(enrichedData);
-      
-      const trades = [];
-      let position = null;
-      for (let i = 0; i < enrichedData.length; i++) {
-        const { date, ratio, zScore } = enrichedData[i];
-        
-        if (!position && Math.abs(zScore) >= 2.5) {
-          position = {
-            entryDate: date,
-            longStock: zScore < 0 ? selectedPair.stockA : selectedPair.stockB,
-            shortStock: zScore < 0 ? selectedPair.stockB : selectedPair.stockA,
-          };
-        } else if (position && Math.abs(zScore) <= 1.5) {
-          position.exitDate = date;
-          position.holdingPeriod = new Date(date) - new Date(position.entryDate);
-          trades.push(position);
-          position = null;
-        }
+      const minLength = Math.min(pricesA.length, pricesB.length);
+      const ratios = [];
+      for (let i = 0; i < minLength; i++) {
+        ratios.push({
+          date: pricesA[i].date,
+          ratio: pricesA[i].close / pricesB[i].close,
+          stockAClose: pricesA[i].close,
+          stockBClose: pricesB[i].close,
+        });
       }
-      setTradeResults(trades);
-
-      const totalTrades = trades.length;
-      const winners = trades.filter(t => Math.random() > 0.5).length;
-      const losers = totalTrades - winners;
-      setTradeSummary({ totalTrades, winners, losers, winRate: ((winners / totalTrades) * 100).toFixed(2) });
+      
+      const zScores = calculateZScore(ratios.map(r => r.ratio));
+      
+      const tableData = ratios.map((item, index) => ({
+        date: item.date,
+        stockAClose: item.stockAClose,
+        stockBClose: item.stockBClose,
+        ratio: item.ratio,
+        zScore: zScores[index] || 0,
+      }));
+      
+      setBacktestData(tableData);
     } catch (error) {
-      console.error('Error in backtesting:', error);
+      console.error("Error in backtest:", error);
     }
   };
 
   return (
     <div>
       <h1>Pair Trading Backtest</h1>
-      <label>From Date: <input type='date' value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
-      <label>To Date: <input type='date' value={toDate} onChange={e => setToDate(e.target.value)} /></label>
       <div>
-        <label>Stock A: <select name='stockA' onChange={handleSelection} value={selectedPair.stockA}><option value=''>-- Select --</option>{stocks.map(s => <option key={s} value={s}>{s}</option>)}</select></label>
+        <label>Select Stock A: </label>
+        <select name="stockA" onChange={handleSelection} value={selectedPair.stockA}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
       </div>
       <div>
-        <label>Stock B: <select name='stockB' onChange={handleSelection} value={selectedPair.stockB}><option value=''>-- Select --</option>{stocks.map(s => <option key={s} value={s}>{s}</option>)}</select></label>
+        <label>Select Stock B: </label>
+        <select name="stockB" onChange={handleSelection} value={selectedPair.stockB}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
       </div>
       <button onClick={runBacktest}>Run Backtest</button>
-      {dataTable.length > 0 && (
-        <table>
-          <thead><tr><th>Date</th><th>Stock A</th><th>Stock B</th><th>Ratio</th><th>Z-Score</th></tr></thead>
-          <tbody>{dataTable.map((row, i) => i < 100 && <tr key={i}><td>{row.date}</td><td>{row.stockA}</td><td>{row.stockB}</td><td>{row.ratio.toFixed(3)}</td><td>{row.zScore.toFixed(3)}</td></tr>)}</tbody>
-        </table>
-      )}
-      {tradeResults.length > 0 && (
-        <table>
-          <thead><tr><th>Entry Date</th><th>Exit Date</th><th>Long</th><th>Short</th><th>Holding Period</th></tr></thead>
-          <tbody>{tradeResults.map((t, i) => <tr key={i}><td>{t.entryDate}</td><td>{t.exitDate}</td><td>{t.longStock}</td><td>{t.shortStock}</td><td>{t.holdingPeriod} days</td></tr>)}</tbody>
-        </table>
-      )}
-      {tradeSummary && (
-        <div>
-          <p>Total Trades: {tradeSummary.totalTrades}</p>
-          <p>Winners: {tradeSummary.winners}</p>
-          <p>Losers: {tradeSummary.losers}</p>
-          <p>Win Rate: {tradeSummary.winRate}%</p>
+      
+      {backtestData.length > 0 && (
+        <div style={{ maxHeight: '300px', overflowY: 'scroll', marginTop: '20px' }}>
+          <table border="1" width="100%">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Stock A Close</th>
+                <th>Stock B Close</th>
+                <th>Ratio</th>
+                <th>Z-score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {backtestData.map((row, index) => (
+                <tr key={index}>
+                  <td>{row.date}</td>
+                  <td>{row.stockAClose.toFixed(2)}</td>
+                  <td>{row.stockBClose.toFixed(2)}</td>
+                  <td>{row.ratio.toFixed(4)}</td>
+                  <td>{row.zScore.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
 };
+
 export default Backtest;
