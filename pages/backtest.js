@@ -54,9 +54,9 @@ const Backtest = () => {
 
       const pricesA = filterByDate(stockAData.data);
       const pricesB = filterByDate(stockBData.data);
-      
       const minLength = Math.min(pricesA.length, pricesB.length);
       const ratios = [];
+
       for (let i = 0; i < minLength; i++) {
         ratios.push({
           date: pricesA[i].date,
@@ -65,9 +65,14 @@ const Backtest = () => {
           stockBClose: pricesB[i].close,
         });
       }
-      
-      const zScores = calculateZScore(ratios.map(r => r.ratio));
-      
+
+      const rollingWindow = 50;
+      const zScores = [];
+      for (let i = 0; i < ratios.length; i++) {
+        const windowData = ratios.slice(Math.max(0, i - rollingWindow + 1), i + 1).map(r => r.ratio);
+        zScores.push(calculateZScore(windowData).pop());
+      }
+
       const tableData = ratios.map((item, index) => ({
         date: item.date,
         stockAClose: item.stockAClose,
@@ -80,20 +85,25 @@ const Backtest = () => {
       // Trade Logic
       const trades = [];
       let openTrade = null;
-      for (let i = 0; i < tableData.length; i++) {
-        let { date, zScore } = tableData[i];
+      for (let i = 1; i < tableData.length; i++) {
+        const prevZ = tableData[i - 1].zScore;
+        const currZ = tableData[i].zScore;
+        const { date } = tableData[i];
 
         if (!openTrade) {
-          if (zScore <= -2.5) {
+          if (prevZ < -2.5 && currZ >= -2.5) {
             openTrade = { entryDate: date, type: 'LONG', exitDate: null };
-          } else if (zScore >= 2.5) {
+          } else if (prevZ > 2.5 && currZ <= 2.5) {
             openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
           }
         } else {
           const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
-          if ((openTrade.type === 'LONG' && zScore >= -1.5) ||
-              (openTrade.type === 'SHORT' && zScore <= 1.5) ||
-              holdingPeriod >= 30) {
+          const shouldExit =
+            (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
+            (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
+            holdingPeriod >= 15;
+
+          if (shouldExit) {
             openTrade.exitDate = date;
             trades.push(openTrade);
             openTrade = null;
@@ -169,16 +179,21 @@ const Backtest = () => {
                 <th>Entry Date</th>
                 <th>Exit Date</th>
                 <th>Trade Type</th>
+                <th>Holding Period (days)</th>
               </tr>
             </thead>
             <tbody>
-              {tradeResults.map((trade, index) => (
-                <tr key={index}>
-                  <td>{trade.entryDate}</td>
-                  <td>{trade.exitDate || 'Open'}</td>
-                  <td>{trade.type}</td>
-                </tr>
-              ))}
+              {tradeResults.map((trade, index) => {
+                const holdingPeriod = (new Date(trade.exitDate) - new Date(trade.entryDate)) / (1000 * 60 * 60 * 24);
+                return (
+                  <tr key={index}>
+                    <td>{trade.entryDate}</td>
+                    <td>{trade.exitDate}</td>
+                    <td>{trade.type}</td>
+                    <td>{holdingPeriod.toFixed(0)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
