@@ -91,9 +91,9 @@ const Backtest = () => {
         const { date } = tableData[i];
 
         if (!openTrade) {
-          if (prevZ < -2.5 && currZ >= -2.5) {
+          if (prevZ > -2.5 && currZ <= -2.5) {
             openTrade = { entryDate: date, type: 'LONG', exitDate: null };
-          } else if (prevZ > 2.5 && currZ <= 2.5) {
+          } else if (prevZ < 2.5 && currZ >= 2.5) {
             openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
           }
         } else {
