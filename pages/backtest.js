@@ -3,14 +3,13 @@ import { useEffect, useState } from "react";
 import { getStockDataFromIndexedDB } from "@/utils/indexedDbUtils";
 import { calculateZScore } from "@/utils/calculations";
 
-export default function BacktestPage({ params }: { params: { pair: string } }) {
-  const [stockData, setStockData] = useState<Record<string, any[]>>({});
-  const [trades, setTrades] = useState<any[]>([]);
+export default function BacktestPage({ params }) {
+  const [stockData, setStockData] = useState({});
+  const [trades, setTrades] = useState([]);
   const [entryLongZ, setEntryLongZ] = useState(-2.5);
   const [entryShortZ, setEntryShortZ] = useState(2.5);
   const [exitLongZ, setExitLongZ] = useState(-1.5);
   const [exitShortZ, setExitShortZ] = useState(1.5);
-
   const [backtestTrigger, setBacktestTrigger] = useState(false);
 
   const runBacktest = async () => {
@@ -20,15 +19,15 @@ export default function BacktestPage({ params }: { params: { pair: string } }) {
 
     if (!dataA.length || !dataB.length) return;
 
-    const pricesA: number[] = dataA.map(d => d.close);
-    const pricesB: number[] = dataB.map(d => d.close);
-    const dates: string[] = dataA.map(d => d.date);
+    const pricesA = dataA.map(d => d.close);
+    const pricesB = dataB.map(d => d.close);
+    const dates = dataA.map(d => d.date);
 
     const ratio = pricesA.map((price, i) => price / pricesB[i]);
     const zScores = calculateZScore(ratio, 50);
 
     const tradeResults = [];
-    let openTrade: any = null;
+    let openTrade = null;
 
     for (let i = 1; i < zScores.length; i++) {
       const prevZ = zScores[i - 1];
@@ -37,15 +36,21 @@ export default function BacktestPage({ params }: { params: { pair: string } }) {
 
       if (!openTrade) {
         if (prevZ > entryLongZ && currZ <= entryLongZ) {
-          openTrade = { entryDate: date, type: 'LONG', exitDate: null };
+          openTrade = { entryDate: date, type: "LONG", exitDate: null };
         } else if (prevZ < entryShortZ && currZ >= entryShortZ) {
-          openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
+          openTrade = { entryDate: date, type: "SHORT", exitDate: null };
         }
       } else {
-        const holdingPeriod = (new Date(date).getTime() - new Date(openTrade.entryDate).getTime()) / (1000 * 60 * 60 * 24);
+        const holdingPeriod =
+          (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
+
         const shouldExit =
-          (openTrade.type === 'LONG' && prevZ < exitLongZ && currZ >= exitLongZ) ||
-          (openTrade.type === 'SHORT' && prevZ > exitShortZ && currZ <= exitShortZ) ||
+          (openTrade.type === "LONG" &&
+            prevZ < exitLongZ &&
+            currZ >= exitLongZ) ||
+          (openTrade.type === "SHORT" &&
+            prevZ > exitShortZ &&
+            currZ <= exitShortZ) ||
           holdingPeriod >= 15;
 
         if (shouldExit) {
@@ -65,7 +70,9 @@ export default function BacktestPage({ params }: { params: { pair: string } }) {
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Pair Trading Backtest: {params.pair}</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Pair Trading Backtest: {params.pair}
+      </h1>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div>
@@ -111,7 +118,7 @@ export default function BacktestPage({ params }: { params: { pair: string } }) {
       </div>
 
       <button
-        onClick={() => setBacktestTrigger(prev => !prev)}
+        onClick={() => setBacktestTrigger(!backtestTrigger)}
         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
       >
         Run Backtest
