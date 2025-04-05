@@ -92,17 +92,19 @@ const Backtest = () => {
         const prevZScore = tableData[i - 1].zScore;
 
         if (!openTrade) {
-          if (zScore < zEntryLong && prevZScore >= zEntryLong) {
+          if (prevZ > -2.5 && currZ <= -2.5) {
             openTrade = { entryDate: date, type: 'LONG', exitDate: null };
-          } else if (zScore > zEntryShort && prevZScore <= zEntryShort) {
+          } else if (prevZ < 2.5 && currZ >= 2.5) {
             openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
           }
         } else {
           const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
-          const shouldExitLong = openTrade.type === 'LONG' && zScore > zExitLong && prevZScore <= zExitLong;
-          const shouldExitShort = openTrade.type === 'SHORT' && zScore < zExitShort && prevZScore >= zExitShort;
+          const shouldExit =
+            (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
+            (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
+            holdingPeriod >= 15;
 
-          if (shouldExitLong || shouldExitShort || holdingPeriod >= 15) {
+          if (shouldExit) {
             openTrade.exitDate = date;
             trades.push(openTrade);
             openTrade = null;
