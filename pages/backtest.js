@@ -10,6 +10,12 @@ const Backtest = () => {
   const [backtestData, setBacktestData] = useState([]);
   const [tradeResults, setTradeResults] = useState([]);
 
+  // Z-score thresholds
+  const [zEntryLong, setZEntryLong] = useState(-2.5);
+  const [zExitLong, setZExitLong] = useState(-1.5);
+  const [zEntryShort, setZEntryShort] = useState(2.5);
+  const [zExitShort, setZExitShort] = useState(1.5);
+
   useEffect(() => {
     const fetchStocks = async () => {
       try {
@@ -54,9 +60,9 @@ const Backtest = () => {
 
       const pricesA = filterByDate(stockAData.data);
       const pricesB = filterByDate(stockBData.data);
+      
       const minLength = Math.min(pricesA.length, pricesB.length);
       const ratios = [];
-
       for (let i = 0; i < minLength; i++) {
         ratios.push({
           date: pricesA[i].date,
@@ -66,12 +72,7 @@ const Backtest = () => {
         });
       }
 
-      const rollingWindow = 50;
-      const zScores = [];
-      for (let i = 0; i < ratios.length; i++) {
-        const windowData = ratios.slice(Math.max(0, i - rollingWindow + 1), i + 1).map(r => r.ratio);
-        zScores.push(calculateZScore(windowData).pop());
-      }
+      const zScores = calculateZScore(ratios.map(r => r.ratio), 50); // 50-day lookback
 
       const tableData = ratios.map((item, index) => ({
         date: item.date,
@@ -85,31 +86,30 @@ const Backtest = () => {
       // Trade Logic
       const trades = [];
       let openTrade = null;
+
       for (let i = 1; i < tableData.length; i++) {
-        const prevZ = tableData[i - 1].zScore;
-        const currZ = tableData[i].zScore;
-        const { date } = tableData[i];
+        const { date, zScore } = tableData[i];
+        const prevZScore = tableData[i - 1].zScore;
 
         if (!openTrade) {
-          if (prevZ < -2.5 && currZ >= -2.5) {
+          if (zScore < zEntryLong && prevZScore >= zEntryLong) {
             openTrade = { entryDate: date, type: 'LONG', exitDate: null };
-          } else if (prevZ > 2.5 && currZ <= 2.5) {
+          } else if (zScore > zEntryShort && prevZScore <= zEntryShort) {
             openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
           }
         } else {
           const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
-          const shouldExit =
-            (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
-            (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
-            holdingPeriod >= 15;
+          const shouldExitLong = openTrade.type === 'LONG' && zScore > zExitLong && prevZScore <= zExitLong;
+          const shouldExitShort = openTrade.type === 'SHORT' && zScore < zExitShort && prevZScore >= zExitShort;
 
-          if (shouldExit) {
+          if (shouldExitLong || shouldExitShort || holdingPeriod >= 15) {
             openTrade.exitDate = date;
             trades.push(openTrade);
             openTrade = null;
           }
         }
       }
+
       setTradeResults(trades);
     } catch (error) {
       console.error("Error in backtest:", error);
@@ -119,12 +119,29 @@ const Backtest = () => {
   return (
     <div>
       <h1>Pair Trading Backtest</h1>
+
+      {/* Date Inputs */}
       <div>
         <label>From: </label>
         <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
         <label>To: </label>
         <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
       </div>
+
+      {/* Z-score Threshold Inputs */}
+      <div>
+        <h3>Z-Score Thresholds</h3>
+        <label>Entry Z (Long): </label>
+        <input type="number" step="0.1" value={zEntryLong} onChange={e => setZEntryLong(parseFloat(e.target.value))} />
+        <label>Exit Z (Long): </label>
+        <input type="number" step="0.1" value={zExitLong} onChange={e => setZExitLong(parseFloat(e.target.value))} />
+        <label>Entry Z (Short): </label>
+        <input type="number" step="0.1" value={zEntryShort} onChange={e => setZEntryShort(parseFloat(e.target.value))} />
+        <label>Exit Z (Short): </label>
+        <input type="number" step="0.1" value={zExitShort} onChange={e => setZExitShort(parseFloat(e.target.value))} />
+      </div>
+
+      {/* Stock Selection */}
       <div>
         <label>Select Stock A: </label>
         <select name="stockA" onChange={handleSelection} value={selectedPair.stockA}>
@@ -139,6 +156,7 @@ const Backtest = () => {
           {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
         </select>
       </div>
+
       <button onClick={runBacktest}>Run Backtest</button>
 
       {/* Backtest Table */}
@@ -169,10 +187,10 @@ const Backtest = () => {
         </div>
       )}
 
-      {/* Trade Results Table */}
+      {/* Trade Results */}
       {tradeResults.length > 0 && (
         <div style={{ marginTop: '20px' }}>
-          <h2>Trade Results</h2>
+          <h3>Trade Results</h3>
           <table border="1" width="100%">
             <thead>
               <tr>
@@ -190,7 +208,7 @@ const Backtest = () => {
                     <td>{trade.entryDate}</td>
                     <td>{trade.exitDate}</td>
                     <td>{trade.type}</td>
-                    <td>{holdingPeriod.toFixed(0)}</td>
+                    <td>{holdingPeriod}</td>
                   </tr>
                 );
               })}
