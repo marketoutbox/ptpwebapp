@@ -1,152 +1,225 @@
-"use client";
-import { useEffect, useState } from "react";
-import { getStockDataFromIndexedDB } from "@/utils/indexedDbUtils";
-import { calculateZScore } from "@/utils/calculations";
+import { useState, useEffect } from 'react';
+import { openDB } from 'idb';
+import calculateZScore from '../utils/calculations';
 
-export default function BacktestPage({ params }) {
-  const [stockData, setStockData] = useState({});
-  const [trades, setTrades] = useState([]);
-  const [entryLongZ, setEntryLongZ] = useState(-2.5);
-  const [entryShortZ, setEntryShortZ] = useState(2.5);
-  const [exitLongZ, setExitLongZ] = useState(-1.5);
-  const [exitShortZ, setExitShortZ] = useState(1.5);
-  const [backtestTrigger, setBacktestTrigger] = useState(false);
+const Backtest = () => {
+  const [stocks, setStocks] = useState([]);
+  const [selectedPair, setSelectedPair] = useState({ stockA: '', stockB: '' });
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [backtestData, setBacktestData] = useState([]);
+  const [tradeResults, setTradeResults] = useState([]);
 
-  const runBacktest = async () => {
-    const [stockA, stockB] = params.pair.split("-");
-    const dataA = await getStockDataFromIndexedDB(stockA);
-    const dataB = await getStockDataFromIndexedDB(stockB);
-
-    if (!dataA.length || !dataB.length) return;
-
-    const pricesA = dataA.map(d => d.close);
-    const pricesB = dataB.map(d => d.close);
-    const dates = dataA.map(d => d.date);
-
-    const ratio = pricesA.map((price, i) => price / pricesB[i]);
-    const zScores = calculateZScore(ratio, 50);
-
-    const tradeResults = [];
-    let openTrade = null;
-
-    for (let i = 1; i < zScores.length; i++) {
-      const prevZ = zScores[i - 1];
-      const currZ = zScores[i];
-      const date = dates[i];
-
-      if (!openTrade) {
-        if (prevZ > entryLongZ && currZ <= entryLongZ) {
-          openTrade = { entryDate: date, type: "LONG", exitDate: null };
-        } else if (prevZ < entryShortZ && currZ >= entryShortZ) {
-          openTrade = { entryDate: date, type: "SHORT", exitDate: null };
-        }
-      } else {
-        const holdingPeriod =
-          (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
-
-        const shouldExit =
-          (openTrade.type === "LONG" &&
-            prevZ < exitLongZ &&
-            currZ >= exitLongZ) ||
-          (openTrade.type === "SHORT" &&
-            prevZ > exitShortZ &&
-            currZ <= exitShortZ) ||
-          holdingPeriod >= 15;
-
-        if (shouldExit) {
-          openTrade.exitDate = date;
-          tradeResults.push(openTrade);
-          openTrade = null;
-        }
-      }
-    }
-
-    setTrades(tradeResults);
-  };
+  // Z-score thresholds
+  const [zEntryLong, setZEntryLong] = useState(-2.5);
+  const [zExitLong, setZExitLong] = useState(-1.5);
+  const [zEntryShort, setZEntryShort] = useState(2.5);
+  const [zExitShort, setZExitShort] = useState(1.5);
 
   useEffect(() => {
-    runBacktest();
-  }, [backtestTrigger]);
+    const fetchStocks = async () => {
+      try {
+        const db = await openDB('StockDatabase', 1);
+        const tx = db.transaction('stocks', 'readonly');
+        const store = tx.objectStore('stocks');
+        const allStocks = await store.getAll();
+        if (!allStocks.length) return;
+        setStocks(allStocks.map(stock => stock.symbol));
+      } catch (error) {
+        console.error("Error fetching stocks:", error);
+      }
+    };
+    fetchStocks();
+  }, []);
+
+  const handleSelection = (event) => {
+    const { name, value } = event.target;
+    setSelectedPair(prev => ({ ...prev, [name]: value }));
+  };
+
+  const filterByDate = (data) => {
+    return data.filter(entry => entry.date >= fromDate && entry.date <= toDate);
+  };
+
+  const runBacktest = async () => {
+    if (!selectedPair.stockA || !selectedPair.stockB) {
+      alert('Please select two stocks.');
+      return;
+    }
+
+    try {
+      const db = await openDB('StockDatabase', 1);
+      const tx = db.transaction('stocks', 'readonly');
+      const store = tx.objectStore('stocks');
+      const stockAData = await store.get(selectedPair.stockA);
+      const stockBData = await store.get(selectedPair.stockB);
+      if (!stockAData || !stockBData) {
+        alert("Stock data not found.");
+        return;
+      }
+
+      const pricesA = filterByDate(stockAData.data);
+      const pricesB = filterByDate(stockBData.data);
+      
+      const minLength = Math.min(pricesA.length, pricesB.length);
+      const ratios = [];
+      for (let i = 0; i < minLength; i++) {
+        ratios.push({
+          date: pricesA[i].date,
+          ratio: pricesA[i].close / pricesB[i].close,
+          stockAClose: pricesA[i].close,
+          stockBClose: pricesB[i].close,
+        });
+      }
+
+      const zScores = calculateZScore(ratios.map(r => r.ratio), 50); // 50-day lookback
+
+      const tableData = ratios.map((item, index) => ({
+        date: item.date,
+        stockAClose: item.stockAClose,
+        stockBClose: item.stockBClose,
+        ratio: item.ratio,
+        zScore: zScores[index] || 0,
+      }));
+      setBacktestData(tableData);
+
+      // Trade Logic
+      const trades = [];
+      let openTrade = null;
+
+      for (let i = 1; i < tableData.length; i++) {
+        const { date, zScore } = tableData[i];
+        const prevZScore = tableData[i - 1].zScore;
+
+        if (!openTrade) {
+          if (prevZ > -2.5 && currZ <= -2.5) {
+            openTrade = { entryDate: date, type: 'LONG', exitDate: null };
+          } else if (prevZ < 2.5 && currZ >= 2.5) {
+            openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
+          }
+        } else {
+          const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
+          const shouldExit =
+            (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
+            (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
+            holdingPeriod >= 15;
+
+          if (shouldExit) {
+            openTrade.exitDate = date;
+            trades.push(openTrade);
+            openTrade = null;
+          }
+        }
+      }
+
+      setTradeResults(trades);
+    } catch (error) {
+      console.error("Error in backtest:", error);
+    }
+  };
 
   return (
-    <div className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">
-        Pair Trading Backtest: {params.pair}
-      </h1>
+    <div>
+      <h1>Pair Trading Backtest</h1>
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block font-semibold">Entry Long Z (cross below)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={entryLongZ}
-            onChange={(e) => setEntryLongZ(parseFloat(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-        </div>
-        <div>
-          <label className="block font-semibold">Entry Short Z (cross above)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={entryShortZ}
-            onChange={(e) => setEntryShortZ(parseFloat(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-        </div>
-        <div>
-          <label className="block font-semibold">Exit Long Z (cross above)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={exitLongZ}
-            onChange={(e) => setExitLongZ(parseFloat(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-        </div>
-        <div>
-          <label className="block font-semibold">Exit Short Z (cross below)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={exitShortZ}
-            onChange={(e) => setExitShortZ(parseFloat(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-        </div>
+      {/* Date Inputs */}
+      <div>
+        <label>From: </label>
+        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+        <label>To: </label>
+        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
       </div>
 
-      <button
-        onClick={() => setBacktestTrigger(!backtestTrigger)}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-      >
-        Run Backtest
-      </button>
+      {/* Z-score Threshold Inputs */}
+      <div>
+        <h3>Z-Score Thresholds</h3>
+        <label>Entry Z (Long): </label>
+        <input type="number" step="0.1" value={zEntryLong} onChange={e => setZEntryLong(parseFloat(e.target.value))} />
+        <label>Exit Z (Long): </label>
+        <input type="number" step="0.1" value={zExitLong} onChange={e => setZExitLong(parseFloat(e.target.value))} />
+        <label>Entry Z (Short): </label>
+        <input type="number" step="0.1" value={zEntryShort} onChange={e => setZEntryShort(parseFloat(e.target.value))} />
+        <label>Exit Z (Short): </label>
+        <input type="number" step="0.1" value={zExitShort} onChange={e => setZExitShort(parseFloat(e.target.value))} />
+      </div>
 
-      <div className="mt-6">
-        <h2 className="text-xl font-semibold mb-2">Trades</h2>
-        <div className="overflow-auto max-h-[400px] border rounded">
-          <table className="w-full text-sm table-auto border-collapse">
-            <thead className="bg-gray-200 sticky top-0">
+      {/* Stock Selection */}
+      <div>
+        <label>Select Stock A: </label>
+        <select name="stockA" onChange={handleSelection} value={selectedPair.stockA}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
+      </div>
+      <div>
+        <label>Select Stock B: </label>
+        <select name="stockB" onChange={handleSelection} value={selectedPair.stockB}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
+      </div>
+
+      <button onClick={runBacktest}>Run Backtest</button>
+
+      {/* Backtest Table */}
+      {backtestData.length > 0 && (
+        <div style={{ maxHeight: '300px', overflowY: 'scroll', marginTop: '20px' }}>
+          <table border="1" width="100%">
+            <thead>
               <tr>
-                <th className="border p-2">Type</th>
-                <th className="border p-2">Entry Date</th>
-                <th className="border p-2">Exit Date</th>
+                <th>Date</th>
+                <th>Stock A Close</th>
+                <th>Stock B Close</th>
+                <th>Ratio</th>
+                <th>Z-score</th>
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade, i) => (
-                <tr key={i} className="odd:bg-white even:bg-gray-50">
-                  <td className="border p-2 text-center">{trade.type}</td>
-                  <td className="border p-2 text-center">{trade.entryDate}</td>
-                  <td className="border p-2 text-center">{trade.exitDate}</td>
+              {backtestData.map((row, index) => (
+                <tr key={index}>
+                  <td>{row.date}</td>
+                  <td>{row.stockAClose.toFixed(2)}</td>
+                  <td>{row.stockBClose.toFixed(2)}</td>
+                  <td>{row.ratio.toFixed(4)}</td>
+                  <td>{row.zScore.toFixed(4)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
+
+      {/* Trade Results */}
+      {tradeResults.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h3>Trade Results</h3>
+          <table border="1" width="100%">
+            <thead>
+              <tr>
+                <th>Entry Date</th>
+                <th>Exit Date</th>
+                <th>Trade Type</th>
+                <th>Holding Period (days)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tradeResults.map((trade, index) => {
+                const holdingPeriod = (new Date(trade.exitDate) - new Date(trade.entryDate)) / (1000 * 60 * 60 * 24);
+                return (
+                  <tr key={index}>
+                    <td>{trade.entryDate}</td>
+                    <td>{trade.exitDate}</td>
+                    <td>{trade.type}</td>
+                    <td>{holdingPeriod}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default Backtest;
