@@ -35,86 +35,110 @@ const Backtest = () => {
     return data.filter(entry => entry.date >= fromDate && entry.date <= toDate);
   };
 
-  const runBacktest = async () => {
-    if (!selectedPair.stockA || !selectedPair.stockB) {
-      alert('Please select two stocks.');
+const runBacktest = async () => {
+  if (!selectedPair.stockA || !selectedPair.stockB) {
+    alert('Please select two stocks.');
+    return;
+  }
+
+  try {
+    const db = await openDB('StockDatabase', 1);
+    const tx = db.transaction('stocks', 'readonly');
+    const store = tx.objectStore('stocks');
+    const stockAData = await store.get(selectedPair.stockA);
+    const stockBData = await store.get(selectedPair.stockB);
+    if (!stockAData || !stockBData) {
+      alert("Stock data not found.");
       return;
     }
 
-    try {
-      const db = await openDB('StockDatabase', 1);
-      const tx = db.transaction('stocks', 'readonly');
-      const store = tx.objectStore('stocks');
-      const stockAData = await store.get(selectedPair.stockA);
-      const stockBData = await store.get(selectedPair.stockB);
-      if (!stockAData || !stockBData) {
-        alert("Stock data not found.");
-        return;
-      }
+    const pricesA = filterByDate(stockAData.data);
+    const pricesB = filterByDate(stockBData.data);
+    const minLength = Math.min(pricesA.length, pricesB.length);
+    const ratios = [];
 
-      const pricesA = filterByDate(stockAData.data);
-      const pricesB = filterByDate(stockBData.data);
-      const minLength = Math.min(pricesA.length, pricesB.length);
-      const ratios = [];
+    for (let i = 0; i < minLength; i++) {
+      ratios.push({
+        date: pricesA[i].date,
+        ratio: pricesA[i].close / pricesB[i].close,
+        stockAClose: pricesA[i].close,
+        stockBClose: pricesB[i].close,
+      });
+    }
 
-      for (let i = 0; i < minLength; i++) {
-        ratios.push({
-          date: pricesA[i].date,
-          ratio: pricesA[i].close / pricesB[i].close,
-          stockAClose: pricesA[i].close,
-          stockBClose: pricesB[i].close,
-        });
-      }
+    const rollingWindow = 50;
+    const zScores = [];
+    for (let i = 0; i < ratios.length; i++) {
+      const windowData = ratios.slice(Math.max(0, i - rollingWindow + 1), i + 1).map(r => r.ratio);
+      zScores.push(calculateZScore(windowData).pop());
+    }
 
-      const rollingWindow = 50;
-      const zScores = [];
-      for (let i = 0; i < ratios.length; i++) {
-        const windowData = ratios.slice(Math.max(0, i - rollingWindow + 1), i + 1).map(r => r.ratio);
-        zScores.push(calculateZScore(windowData).pop());
-      }
+    const tableData = ratios.map((item, index) => ({
+      date: item.date,
+      stockAClose: item.stockAClose,
+      stockBClose: item.stockBClose,
+      ratio: item.ratio,
+      zScore: zScores[index] || 0,
+    }));
+    setBacktestData(tableData);
 
-      const tableData = ratios.map((item, index) => ({
-        date: item.date,
-        stockAClose: item.stockAClose,
-        stockBClose: item.stockBClose,
-        ratio: item.ratio,
-        zScore: zScores[index] || 0,
-      }));
-      setBacktestData(tableData);
+    const trades = [];
+    let openTrade = null;
 
-      // Trade Logic
-      const trades = [];
-      let openTrade = null;
-      for (let i = 1; i < tableData.length; i++) {
-        const prevZ = tableData[i - 1].zScore;
-        const currZ = tableData[i].zScore;
-        const { date } = tableData[i];
+    for (let i = 1; i < tableData.length; i++) {
+      const prevZ = tableData[i - 1].zScore;
+      const currZ = tableData[i].zScore;
+      const { date, ratio } = tableData[i];
 
-        if (!openTrade) {
-          if (prevZ > -2.5 && currZ <= -2.5) {
-            openTrade = { entryDate: date, type: 'LONG', exitDate: null };
-          } else if (prevZ < 2.5 && currZ >= 2.5) {
-            openTrade = { entryDate: date, type: 'SHORT', exitDate: null };
-          }
-        } else {
-          const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
-          const shouldExit =
-            (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
-            (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
-            holdingPeriod >= 15;
+      if (!openTrade) {
+        if (prevZ > -2.5 && currZ <= -2.5) {
+          openTrade = { entryDate: date, type: 'LONG', entryIndex: i };
+        } else if (prevZ < 2.5 && currZ >= 2.5) {
+          openTrade = { entryDate: date, type: 'SHORT', entryIndex: i };
+        }
+      } else {
+        const holdingPeriod = (new Date(date) - new Date(openTrade.entryDate)) / (1000 * 60 * 60 * 24);
+        const exitCondition =
+          (openTrade.type === 'LONG' && prevZ < -1.5 && currZ >= -1.5) ||
+          (openTrade.type === 'SHORT' && prevZ > 1.5 && currZ <= 1.5) ||
+          holdingPeriod >= 15;
 
-          if (shouldExit) {
-            openTrade.exitDate = date;
-            trades.push(openTrade);
-            openTrade = null;
-          }
+        if (exitCondition) {
+          const exitIndex = i;
+          const entryRatio = tableData[openTrade.entryIndex].ratio;
+          const exitRatio = ratio;
+
+          const tradeSlice = tableData.slice(openTrade.entryIndex, exitIndex + 1);
+          const ratioSeries = tradeSlice.map(r => r.ratio);
+          const drawdowns = ratioSeries.map(r => {
+            if (openTrade.type === 'LONG') return (r - entryRatio) / entryRatio;
+            else return (entryRatio - r) / entryRatio;
+          });
+          const maxDrawdown = Math.max(...drawdowns.map(d => -d)) * 100;
+
+          const profit = openTrade.type === 'LONG'
+            ? ((exitRatio - entryRatio) / entryRatio) * 100
+            : ((entryRatio - exitRatio) / entryRatio) * 100;
+
+          trades.push({
+            entryDate: openTrade.entryDate,
+            exitDate: date,
+            type: openTrade.type,
+            holdingPeriod: holdingPeriod.toFixed(0),
+            profitPercent: profit.toFixed(2),
+            maxDrawdownPercent: maxDrawdown.toFixed(2),
+          });
+
+          openTrade = null;
         }
       }
-      setTradeResults(trades);
-    } catch (error) {
-      console.error("Error in backtest:", error);
     }
-  };
+
+    setTradeResults(trades);
+  } catch (error) {
+    console.error("Error in backtest:", error);
+  }
+};
 
   return (
     <div>
@@ -175,26 +199,27 @@ const Backtest = () => {
           <h2>Trade Results</h2>
           <table border="1" width="100%">
             <thead>
-              <tr>
-                <th>Entry Date</th>
-                <th>Exit Date</th>
-                <th>Trade Type</th>
-                <th>Holding Period (days)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tradeResults.map((trade, index) => {
-                const holdingPeriod = (new Date(trade.exitDate) - new Date(trade.entryDate)) / (1000 * 60 * 60 * 24);
-                return (
-                  <tr key={index}>
-                    <td>{trade.entryDate}</td>
-                    <td>{trade.exitDate}</td>
-                    <td>{trade.type}</td>
-                    <td>{holdingPeriod.toFixed(0)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
+  <tr>
+    <th>Entry Date</th>
+    <th>Exit Date</th>
+    <th>Trade Type</th>
+    <th>Holding Period (days)</th>
+    <th>Profit %</th>
+    <th>Max Drawdown %</th>
+  </tr>
+</thead>
+<tbody>
+  {tradeResults.map((trade, index) => (
+    <tr key={index}>
+      <td>{trade.entryDate}</td>
+      <td>{trade.exitDate}</td>
+      <td>{trade.type}</td>
+      <td>{trade.holdingPeriod}</td>
+      <td>{trade.profitPercent}%</td>
+      <td>{trade.maxDrawdownPercent}%</td>
+    </tr>
+  ))}
+</tbody>
           </table>
         </div>
       )}
