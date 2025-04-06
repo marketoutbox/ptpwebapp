@@ -3,6 +3,7 @@ import { openDB } from 'idb';
 import calculateZScore from '../utils/calculations';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaChartLine, FaExchangeAlt, FaCog, FaInfoCircle, FaDownload } from 'react-icons/fa';
+import dynamic from 'next/dynamic';
 
 // Disable SSR for this component
 const Backtest = dynamic(() => import('../components/Backtest'), {
