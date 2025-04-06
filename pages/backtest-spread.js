@@ -3,6 +3,12 @@ import { openDB } from 'idb';
 import calculateZScore from '../utils/calculations';
 import '../styles/globals.css'
 
+function MyApp({ Component, pageProps }) {
+  return <Component {...pageProps} />
+}
+
+export default MyApp
+
 const Backtest = () => {
   const [stocks, setStocks] = useState([]);
   const [selectedPair, setSelectedPair] = useState({ stockA: '', stockB: '' });
