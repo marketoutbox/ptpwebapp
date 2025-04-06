@@ -4,6 +4,16 @@ import calculateZScore from '../utils/calculations';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaChartLine, FaExchangeAlt, FaCog, FaInfoCircle, FaDownload } from 'react-icons/fa';
 
+// Disable SSR for this component
+const Backtest = dynamic(() => import('../components/Backtest'), {
+  ssr: false,
+  loading: () => <p>Loading...</p>
+});
+
+export default function BacktestPage() {
+  return <Backtest />;
+}
+
 const Backtest = () => {
   // ... [keep all existing state declarations] ...
 
