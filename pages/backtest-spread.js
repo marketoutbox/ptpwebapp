@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { openDB } from 'idb';
 import calculateZScore from '../utils/calculations';
+import '../styles/globals.css'
 
 const Backtest = () => {
   const [stocks, setStocks] = useState([]);
