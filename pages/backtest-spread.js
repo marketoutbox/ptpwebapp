@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
 import { openDB } from 'idb';
 import calculateZScore from '../utils/calculations';
-import '../styles/globals.css'
-
-function MyApp({ Component, pageProps }) {
-  return <Component {...pageProps} />
-}
-
-export default MyApp
 
 const Backtest = () => {
   const [stocks, setStocks] = useState([]);
@@ -19,7 +12,6 @@ const Backtest = () => {
   const [backtestData, setBacktestData] = useState([]);
   const [tradeResults, setTradeResults] = useState([]);
   const [lookbackPeriod, setLookbackPeriod] = useState(50); // For hedge ratio calculation
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const fetchStocks = async () => {
@@ -73,8 +65,6 @@ const Backtest = () => {
       return;
     }
 
-    setIsLoading(true);
-
     try {
       const db = await openDB('StockDatabase', 1);
       const tx = db.transaction('stocks', 'readonly');
@@ -83,7 +73,6 @@ const Backtest = () => {
       const stockBData = await store.get(selectedPair.stockB);
       if (!stockAData || !stockBData) {
         alert("Stock data not found.");
-        setIsLoading(false);
         return;
       }
 
@@ -197,227 +186,112 @@ const Backtest = () => {
       setTradeResults(trades);
     } catch (error) {
       console.error("Error in backtest:", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gray-50 rounded-lg shadow-lg">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Pair Trading Backtest</h1>
-      <p className="text-gray-600 mb-6 text-center italic">Dynamic Spread Model</p>
-      
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Parameters</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Date Range</label>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500">From:</label>
-                <input 
-                  type="date" 
-                  value={fromDate} 
-                  onChange={e => setFromDate(e.target.value)} 
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500">To:</label>
-                <input 
-                  type="date" 
-                  value={toDate} 
-                  onChange={e => setToDate(e.target.value)} 
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-                />
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Stock Selection</label>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500">Stock A:</label>
-                <select 
-                  name="stockA" 
-                  onChange={handleSelection} 
-                  value={selectedPair.stockA}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-                >
-                  <option value="">-- Select --</option>
-                  {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500">Stock B:</label>
-                <select 
-                  name="stockB" 
-                  onChange={handleSelection} 
-                  value={selectedPair.stockB}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-                >
-                  <option value="">-- Select --</option>
-                  {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Lookback Period (days)</label>
-            <input 
-              type="number" 
-              value={lookbackPeriod} 
-              onChange={e => setLookbackPeriod(parseInt(e.target.value))} 
-              min="10"
-              max="252"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Entry Z-score</label>
-            <input 
-              type="number" 
-              step="0.1" 
-              value={entryZ} 
-              onChange={e => setEntryZ(parseFloat(e.target.value))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50" 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Exit Z-score</label>
-            <input 
-              type="number" 
-              step="0.1" 
-              value={exitZ} 
-              onChange={e => setExitZ(parseFloat(e.target.value))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50" 
-            />
-          </div>
-        </div>
-        
-        <div className="flex justify-center">
-          <button 
-            onClick={runBacktest}
-            disabled={isLoading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:bg-blue-300"
-          >
-            {isLoading ? 'Processing...' : 'Run Backtest'}
-          </button>
-        </div>
+    <div>
+      <h1>Pair Trading Backtest (Dynamic Spread Model)</h1>
+      <div>
+        <label>From: </label>
+        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+        <label>To: </label>
+        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
+      </div>
+      <div>
+        <label>Select Stock A: </label>
+        <select name="stockA" onChange={handleSelection} value={selectedPair.stockA}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
+      </div>
+      <div>
+        <label>Select Stock B: </label>
+        <select name="stockB" onChange={handleSelection} value={selectedPair.stockB}>
+          <option value="">-- Select --</option>
+          {stocks.map(symbol => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
       </div>
 
-      {isLoading && (
-        <div className="flex justify-center my-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      )}
+      <div style={{ marginTop: '10px' }}>
+        <label>Lookback Period (days): </label>
+        <input 
+          type="number" 
+          value={lookbackPeriod} 
+          onChange={e => setLookbackPeriod(parseInt(e.target.value))} 
+          min="10"
+          max="252"
+        />
+        <label style={{ marginLeft: '10px' }}>Entry Z-score: </label>
+        <input type="number" step="0.1" value={entryZ} onChange={e => setEntryZ(parseFloat(e.target.value))} />
+        <label style={{ marginLeft: '10px' }}>Exit Z-score: </label>
+        <input type="number" step="0.1" value={exitZ} onChange={e => setExitZ(parseFloat(e.target.value))} />
+      </div>
 
-      {backtestData.length > 0 && !isLoading && (
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-700 mb-3">Backtest Data</h2>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="max-h-64 overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock A Close</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock B Close</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hedge Ratio (β)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Spread (A - βB)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Z-score</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {backtestData.map((row, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">{row.date}</td>
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">{row.stockAClose.toFixed(2)}</td>
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">{row.stockBClose.toFixed(2)}</td>
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">{row.hedgeRatio.toFixed(4)}</td>
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">{row.spread.toFixed(4)}</td>
-                      <td className={`px-6 py-2 whitespace-nowrap text-sm font-medium ${row.zScore > entryZ || row.zScore < -entryZ ? 'text-red-600' : row.zScore > exitZ || row.zScore < -exitZ ? 'text-orange-500' : 'text-gray-900'}`}>
-                        {row.zScore.toFixed(4)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+      <button onClick={runBacktest} style={{ marginTop: '10px' }}>Run Backtest</button>
 
-      {tradeResults.length > 0 && !isLoading && (
-        <div>
-          <h2 className="text-xl font-semibold text-gray-700 mb-3">Trade Results</h2>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit ($)</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Drawdown ($)</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry β</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit β</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">β Change (%)</th>
+      {backtestData.length > 0 && (
+        <div style={{ maxHeight: '300px', overflowY: 'scroll', marginTop: '20px' }}>
+          <table border="1" width="100%">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Stock A Close</th>
+                <th>Stock B Close</th>
+                <th>Hedge Ratio (β)</th>
+                <th>Spread (A - βB)</th>
+                <th>Z-score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {backtestData.map((row, index) => (
+                <tr key={index}>
+                  <td>{row.date}</td>
+                  <td>{row.stockAClose.toFixed(2)}</td>
+                  <td>{row.stockBClose.toFixed(2)}</td>
+                  <td>{row.hedgeRatio.toFixed(4)}</td>
+                  <td>{row.spread.toFixed(4)}</td>
+                  <td>{row.zScore.toFixed(4)}</td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {tradeResults.map((trade, index) => (
-                  <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{trade.entryDate}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{trade.exitDate}</td>
-                    <td className={`px-4 py-2 whitespace-nowrap text-sm font-medium ${trade.type === 'LONG' ? 'text-green-600' : 'text-red-600'}`}>
-                      {trade.type}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{trade.holdingPeriod}</td>
-                    <td className={`px-4 py-2 whitespace-nowrap text-sm font-medium ${parseFloat(trade.profit) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ${trade.profit}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-red-600">${trade.maxDrawdown}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{trade.hedgeRatio}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{trade.exitHedgeRatio}</td>
-                    <td className={`px-4 py-2 whitespace-nowrap text-sm ${parseFloat(trade.hedgeRatioChange) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {trade.hedgeRatioChange}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          
-          {tradeResults.length > 0 && (
-            <div className="mt-6 p-4 bg-white rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-700 mb-2">Summary</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 bg-gray-50 rounded-md">
-                  <p className="text-sm text-gray-500">Total Trades</p>
-                  <p className="text-2xl font-bold text-gray-800">{tradeResults.length}</p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-md">
-                  <p className="text-sm text-gray-500">Profitable Trades</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {tradeResults.filter(t => parseFloat(t.profit) > 0).length}
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-md">
-                  <p className="text-sm text-gray-500">Win Rate</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {((tradeResults.filter(t => parseFloat(t.profit) > 0).length / tradeResults.length) * 100).toFixed(1)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tradeResults.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h2>Trade Results</h2>
+          <table border="1" width="100%">
+            <thead>
+              <tr>
+                <th>Entry Date</th>
+                <th>Exit Date</th>
+                <th>Type</th>
+                <th>Days</th>
+                <th>Profit ($)</th>
+                <th>Drawdown ($)</th>
+                <th>Entry β</th>
+                <th>Exit β</th>
+                <th>β Change (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tradeResults.map((trade, index) => (
+                <tr key={index}>
+                  <td>{trade.entryDate}</td>
+                  <td>{trade.exitDate}</td>
+                  <td>{trade.type}</td>
+                  <td>{trade.holdingPeriod}</td>
+                  <td>${trade.profit}</td>
+                  <td>${trade.maxDrawdown}</td>
+                  <td>{trade.hedgeRatio}</td>
+                  <td>{trade.exitHedgeRatio}</td>
+                  <td>{trade.hedgeRatioChange}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
