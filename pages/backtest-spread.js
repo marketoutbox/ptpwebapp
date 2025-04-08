@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react"
 import { openDB } from "idb"
 import calculateZScore from "../utils/calculations"
-import { Card } from "@/components/ui/card"
+// With a simple div implementation:
+const Card = ({ children, className }) => (
+  <div className={`rounded-lg shadow-md ${className}`}>{children}</div>
+);
 
 const Backtest = () => {
   const [stocks, setStocks] = useState([])
